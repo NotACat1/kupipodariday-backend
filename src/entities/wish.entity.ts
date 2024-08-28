@@ -62,4 +62,7 @@ export class Wish {
   @Column('int', { default: 0 })
   @IsNumber()
   copied: number;
+
+  @ManyToOne(() => Wish, { nullable: true })
+  originalWish: Wish;
 }
