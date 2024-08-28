@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
@@ -105,12 +105,17 @@ describe('WishlistsService', () => {
   });
 
   describe('updateWishlist', () => {
-    it('should update and return the wishlist', async () => {
+    it('should update and return the wishlist if the user is the owner', async () => {
       const updateWishlistDto: UpdateWishlistDto = {
         name: 'Updated Wishlist',
         itemsId: [],
       };
-      const existingWishlist = { id: 1, name: 'Old Wishlist', items: [] };
+      const existingWishlist = {
+        id: 1,
+        name: 'Old Wishlist',
+        items: [],
+        owner: { id: 1 }, // Владелец списка
+      };
       const updatedWishlist = { id: 1, ...updateWishlistDto, items: [] };
 
       jest
@@ -121,27 +126,82 @@ describe('WishlistsService', () => {
         .spyOn(wishlistRepository, 'save')
         .mockResolvedValue(updatedWishlist as any);
 
-      expect(await service.updateWishlist(1, updateWishlistDto)).toBe(
+      expect(await service.updateWishlist(1, 1, updateWishlistDto)).toBe(
         updatedWishlist,
       );
+    });
+
+    it('should throw ForbiddenException if the user is not the owner', async () => {
+      const updateWishlistDto: UpdateWishlistDto = {
+        name: 'Updated Wishlist',
+        itemsId: [],
+      };
+      const existingWishlist = {
+        id: 1,
+        name: 'Old Wishlist',
+        items: [],
+        owner: { id: 2 }, // Другой владелец
+      };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(existingWishlist as any);
+
+      await expect(
+        service.updateWishlist(1, 1, updateWishlistDto),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('deleteWishlist', () => {
-    it('should delete the wishlist', async () => {
+    it('should delete the wishlist if the user is the owner', async () => {
+      const existingWishlist = {
+        id: 1,
+        name: 'Wishlist to Delete',
+        owner: { id: 1 }, // Владелец списка
+      };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(existingWishlist as any);
       jest
         .spyOn(wishlistRepository, 'delete')
         .mockResolvedValue({ affected: 1 } as any);
 
-      await expect(service.deleteWishlist(1)).resolves.not.toThrow();
+      await expect(service.deleteWishlist(1, 1)).resolves.not.toThrow();
+    });
+
+    it('should throw ForbiddenException if the user is not the owner', async () => {
+      const existingWishlist = {
+        id: 1,
+        name: 'Wishlist to Delete',
+        owner: { id: 2 }, // Другой владелец
+      };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(existingWishlist as any);
+
+      await expect(service.deleteWishlist(1, 1)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw NotFoundException if deletion fails', async () => {
+      const existingWishlist = {
+        id: 1,
+        name: 'Wishlist to Delete',
+        owner: { id: 1 }, // Владелец списка
+      };
+
+      jest
+        .spyOn(service, 'findById')
+        .mockResolvedValue(existingWishlist as any);
       jest
         .spyOn(wishlistRepository, 'delete')
         .mockResolvedValue({ affected: 0 } as any);
 
-      await expect(service.deleteWishlist(1)).rejects.toThrow(
+      await expect(service.deleteWishlist(1, 1)).rejects.toThrow(
         NotFoundException,
       );
     });

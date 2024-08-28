@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -81,6 +82,17 @@ export class WishesService {
 
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user) throw new NotFoundException('User not found');
+
+    const existingCopy = await this.wishRepository.findOne({
+      where: {
+        owner: { id: userId },
+        originalWish: { id: originalWish.id },
+      },
+    });
+
+    if (existingCopy) {
+      throw new BadRequestException('You have already copied this wish');
+    }
 
     const copiedWish = this.wishRepository.create({
       ...originalWish,

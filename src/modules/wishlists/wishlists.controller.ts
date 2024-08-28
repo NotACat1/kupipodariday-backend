@@ -59,14 +59,17 @@ export class WishlistsController {
   updateWishlist(
     @Param('id') id: number,
     @Body() updateWishlistDto: UpdateWishlistDto,
+    @Req() req: Request,
   ): Promise<IWishlist> {
-    return this.wishlistService.updateWishlist(id, updateWishlistDto);
+    const userId = req.user['id'];
+    return this.wishlistService.updateWishlist(userId, id, updateWishlistDto);
   }
 
   // DELETE /wishlists/:id
   @UseGuards(AuthGuard('jwt'))
   @Delete(':id')
-  deleteWishlist(@Param('id') id: number): Promise<void> {
-    return this.wishlistService.deleteWishlist(id);
+  deleteWishlist(@Param('id') id: number, @Req() req: Request): Promise<void> {
+    const userId = req.user['id'];
+    return this.wishlistService.deleteWishlist(userId, id);
   }
 }

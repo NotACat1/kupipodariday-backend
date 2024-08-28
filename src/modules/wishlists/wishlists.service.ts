@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -59,10 +63,15 @@ export class WishlistsService {
   }
 
   async updateWishlist(
+    userId: number,
     id: number,
     updateWishlistDto: UpdateWishlistDto,
   ): Promise<IWishlist> {
     const wishlist = await this.findById(id);
+
+    if (wishlist.owner.id !== userId) {
+      throw new ForbiddenException("You cannot edit someone else's wishlist");
+    }
 
     if (updateWishlistDto.itemsId) {
       const items = await this.wishRepository.findByIds(
@@ -75,8 +84,15 @@ export class WishlistsService {
     return this.wishlistRepository.save(wishlist);
   }
 
-  async deleteWishlist(id: number): Promise<void> {
+  async deleteWishlist(userId: number, id: number): Promise<void> {
+    const wishlist = await this.findById(id);
+
+    if (wishlist.owner.id !== userId) {
+      throw new ForbiddenException("You cannot delete someone else's wishlist");
+    }
+
     const result = await this.wishlistRepository.delete(id);
+
     if (result.affected === 0) {
       throw new NotFoundException('Wishlist not found');
     }
