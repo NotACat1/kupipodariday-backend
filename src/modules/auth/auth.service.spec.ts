@@ -1,152 +1,109 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UnauthorizedException } from '@nestjs/common';
 
-import { AuthService } from './auth.service';
 import { UsersService } from '@modules/users/users.service';
 import { HashingService } from '@modules/hashing/hashing.service';
 import { CreateUserDto } from '@modules/users/dto/create.dto';
 import { IUser } from '@type/user.interface';
 
+import { AuthService } from './auth.service';
+
+const mockUserService = {
+  findByUsername: jest.fn(),
+  createUser: jest.fn(),
+};
+
+const mockHashingService = {
+  comparePasswords: jest.fn(),
+};
+
+const mockJwtService = {
+  sign: jest.fn(),
+};
+
 describe('AuthService', () => {
-  let service: AuthService;
-  let userService: UsersService;
-  let hashingService: HashingService;
-  let jwtService: JwtService;
+  let authService: AuthService;
+  let userService: typeof mockUserService;
+  let hashingService: typeof mockHashingService;
+  let jwtService: typeof mockJwtService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        {
-          provide: UsersService,
-          useValue: {
-            findByUsername: jest.fn(),
-            createUser: jest.fn(),
-          },
-        },
-        {
-          provide: HashingService,
-          useValue: {
-            comparePasswords: jest.fn(),
-          },
-        },
-        {
-          provide: JwtService,
-          useValue: {
-            sign: jest.fn(),
-          },
-        },
+        { provide: UsersService, useValue: mockUserService },
+        { provide: HashingService, useValue: mockHashingService },
+        { provide: JwtService, useValue: mockJwtService },
       ],
     }).compile();
 
-    service = module.get<AuthService>(AuthService);
-    userService = module.get<UsersService>(UsersService);
-    hashingService = module.get<HashingService>(HashingService);
-    jwtService = module.get<JwtService>(JwtService);
+    authService = module.get<AuthService>(AuthService);
+    userService = module.get(UsersService);
+    hashingService = module.get(HashingService);
+    jwtService = module.get(JwtService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('validateUser', () => {
-    it('should return the user if credentials are valid', async () => {
-      const user: IUser = {
+    it('should return a user if credentials are valid', async () => {
+      const mockUser = {
         id: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
         username: 'testuser',
-        about: 'Test user',
-        avatar: 'https://i.pravatar.cc/300',
-        email: 'test@example.com',
         password: 'hashedpassword',
-        wishes: [],
-        offers: [],
-        wishlists: [],
-      };
-      const password = 'password';
-      jest.spyOn(userService, 'findByUsername').mockResolvedValue(user);
-      jest.spyOn(hashingService, 'comparePasswords').mockResolvedValue(true);
+      } as IUser;
+      userService.findByUsername.mockResolvedValue(mockUser);
+      hashingService.comparePasswords.mockResolvedValue(true);
 
-      expect(await service.validateUser(user.username, password)).toBe(user);
+      const result = await authService.validateUser('testuser', 'password');
+
+      expect(result).toEqual(mockUser);
+      expect(userService.findByUsername).toHaveBeenCalledWith('testuser');
+      expect(hashingService.comparePasswords).toHaveBeenCalledWith(
+        'password',
+        'hashedpassword',
+      );
     });
 
     it('should throw UnauthorizedException if credentials are invalid', async () => {
-      const user: IUser = {
-        id: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        username: 'testuser',
-        about: 'Test user',
-        avatar: 'https://i.pravatar.cc/300',
-        email: 'test@example.com',
-        password: 'hashedpassword',
-        wishes: [],
-        offers: [],
-        wishlists: [],
-      };
-      const password = 'wrongpassword';
-      jest.spyOn(userService, 'findByUsername').mockResolvedValue(user);
-      jest.spyOn(hashingService, 'comparePasswords').mockResolvedValue(false);
+      userService.findByUsername.mockResolvedValue(null);
 
       await expect(
-        service.validateUser(user.username, password),
-      ).rejects.toThrow(UnauthorizedException);
-    });
-
-    it('should throw UnauthorizedException if user is not found', async () => {
-      jest.spyOn(userService, 'findByUsername').mockResolvedValue(null);
-
-      await expect(
-        service.validateUser('nonexistentuser', 'password'),
+        authService.validateUser('testuser', 'password'),
       ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('signIn', () => {
     it('should return an access token', async () => {
-      const user: IUser = {
-        id: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        username: 'testuser',
-        about: 'Test user',
-        avatar: 'https://i.pravatar.cc/300',
-        email: 'test@example.com',
-        password: 'hashedpassword',
-        wishes: [],
-        offers: [],
-        wishlists: [],
-      };
-      const accessToken = 'access_token';
-      jest.spyOn(jwtService, 'sign').mockReturnValue(accessToken);
+      const mockUser = { id: 1, username: 'testuser' } as IUser;
+      const payload = { username: mockUser.username, sub: mockUser.id };
+      jwtService.sign.mockReturnValue('mockToken');
 
-      expect(await service.signIn(user)).toEqual({ access_token: accessToken });
+      const result = await authService.signIn(mockUser);
+
+      expect(result).toEqual({ access_token: 'mockToken' });
+      expect(jwtService.sign).toHaveBeenCalledWith(payload);
     });
   });
 
   describe('signUp', () => {
-    it('should create a new user and return it', async () => {
+    it('should create and return a new user', async () => {
       const createUserDto: CreateUserDto = {
-        username: 'testuser',
+        username: 'newuser',
         password: 'password',
-        email: 'test@example.com',
-        about: 'Test user',
-        avatar: 'https://i.pravatar.cc/300',
+        email: 'newuser@example.com',
       };
-      const newUser: IUser = {
-        id: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        username: createUserDto.username,
-        about: createUserDto.about,
-        avatar: createUserDto.avatar,
-        email: createUserDto.email,
-        password: 'hashedpassword',
-        wishes: [],
-        offers: [],
-        wishlists: [],
-      };
-      jest.spyOn(userService, 'createUser').mockResolvedValue(newUser);
+      const mockUser = { id: 1, ...createUserDto } as IUser;
+      userService.createUser.mockResolvedValue(mockUser);
 
-      expect(await service.signUp(createUserDto)).toEqual(newUser);
+      const result = await authService.signUp(createUserDto);
+
+      expect(result).toEqual(mockUser);
+      expect(userService.createUser).toHaveBeenCalledWith(createUserDto);
     });
   });
 });

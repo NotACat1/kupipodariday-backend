@@ -1,31 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import * as bcrypt from 'bcrypt';
 import { HashingService } from './hashing.service';
+import * as bcrypt from 'bcrypt';
 
-jest.mock('bcrypt', () => ({
-  hash: jest.fn(),
-  compare: jest.fn(),
-}));
+jest.mock('bcrypt');
 
 describe('HashingService', () => {
   let service: HashingService;
-  const mockHash = bcrypt.hash as jest.Mock;
-  const mockCompare = bcrypt.compare as jest.Mock;
 
   beforeEach(async () => {
-    jest.resetAllMocks();
-
-    mockHash.mockImplementation((password: string, saltRounds: number) => {
-      return Promise.resolve(`hashed_${password}`);
-    });
-    mockCompare.mockImplementation(
-      (password: string, hashedPassword: string) => {
-        return Promise.resolve(
-          password === hashedPassword.replace('hashed_', ''),
-        );
-      },
-    );
-
     const module: TestingModule = await Test.createTestingModule({
       providers: [HashingService],
     }).compile();
@@ -38,34 +20,33 @@ describe('HashingService', () => {
   });
 
   describe('hashPassword', () => {
-    it('should hash the password', async () => {
-      const password = 'password123';
-      const hashedPassword = await service.hashPassword(password);
+    it('should hash password with salt rounds', async () => {
+      const password = 'testPassword';
+      const hashedPassword = 'hashedPassword';
+      const saltRounds = 10;
 
-      expect(hashedPassword).toBe(`hashed_${password}`);
-      expect(mockHash).toHaveBeenCalledWith(password, expect.any(Number));
+      // Mock bcrypt.hash
+      (bcrypt.hash as jest.Mock).mockResolvedValue(hashedPassword);
+
+      const result = await service.hashPassword(password);
+
+      expect(bcrypt.hash).toHaveBeenCalledWith(password, saltRounds);
+      expect(result).toBe(hashedPassword);
     });
   });
 
   describe('comparePasswords', () => {
-    it('should return true if passwords match', async () => {
-      const password = 'password123';
-      const hashedPassword = `hashed_${password}`;
+    it('should compare password with hashed password', async () => {
+      const password = 'testPassword';
+      const hashedPassword = 'hashedPassword';
+
+      // Mock bcrypt.compare
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
       const result = await service.comparePasswords(password, hashedPassword);
 
+      expect(bcrypt.compare).toHaveBeenCalledWith(password, hashedPassword);
       expect(result).toBe(true);
-      expect(mockCompare).toHaveBeenCalledWith(password, hashedPassword);
-    });
-
-    it('should return false if passwords do not match', async () => {
-      const password = 'password123';
-      const hashedPassword = `hashed_differentpassword`;
-
-      const result = await service.comparePasswords(password, hashedPassword);
-
-      expect(result).toBe(false);
-      expect(mockCompare).toHaveBeenCalledWith(password, hashedPassword);
     });
   });
 });

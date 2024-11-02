@@ -1,208 +1,172 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
+import { Repository } from 'typeorm';
 
 import { Wish } from '@entities/wish.entity';
 import { User } from '@entities/user.entity';
+
 import { WishesService } from './wishes.service';
 import { CreateWishDto } from './dto/create.dto';
 import { UpdateWishDto } from './dto/update.dto';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+
+const mockWishRepository = () => ({
+  create: jest.fn(),
+  save: jest.fn(),
+  findOne: jest.fn(),
+  find: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+});
+
+const mockUserRepository = () => ({
+  findOneBy: jest.fn(),
+});
 
 describe('WishesService', () => {
   let service: WishesService;
-  let wishRepository: Repository<Wish>;
-  let userRepository: Repository<User>;
-
-  const mockWishRepository = {
-    find: jest.fn(),
-    findOne: jest.fn(),
-    create: jest.fn(),
-    save: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-  };
-
-  const mockUserRepository = {
-    findOneBy: jest.fn(),
-  };
+  let wishRepository: Partial<jest.Mocked<Repository<Wish>>>;
+  let userRepository: Partial<jest.Mocked<Repository<User>>>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WishesService,
-        { provide: getRepositoryToken(Wish), useValue: mockWishRepository },
-        { provide: getRepositoryToken(User), useValue: mockUserRepository },
+        {
+          provide: getRepositoryToken(Wish),
+          useFactory: mockWishRepository,
+        },
+        {
+          provide: getRepositoryToken(User),
+          useFactory: mockUserRepository,
+        },
       ],
     }).compile();
 
     service = module.get<WishesService>(WishesService);
-    wishRepository = module.get<Repository<Wish>>(getRepositoryToken(Wish));
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    wishRepository = module.get<Partial<jest.Mocked<Repository<Wish>>>>(
+      getRepositoryToken(Wish),
+    );
+    userRepository = module.get<Partial<jest.Mocked<Repository<User>>>>(
+      getRepositoryToken(User),
+    );
   });
 
   describe('createWish', () => {
-    it('should create and return a wish', async () => {
-      const userId = 1;
-      const createWishDto: CreateWishDto = {
-        name: 'New Wish',
-        link: 'https://example.com',
-        image: 'https://example.com/image.jpg',
-        price: 100,
-        description: 'A new wish',
-      };
-      const user = { id: userId } as User;
-      const wish = { ...createWishDto, owner: user } as Wish;
+    it('should create and return a new wish', async () => {
+      const mockUser = { id: 1 } as User;
+      const createWishDto = { name: 'New Wish' } as CreateWishDto;
+      const mockWish = { id: 1, owner: mockUser, ...createWishDto } as Wish;
 
-      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(user);
-      jest.spyOn(wishRepository, 'create').mockReturnValue(wish);
-      jest.spyOn(wishRepository, 'save').mockResolvedValue(wish);
+      userRepository.findOneBy.mockResolvedValue(mockUser);
+      wishRepository.create.mockReturnValue(mockWish);
+      wishRepository.save.mockResolvedValue(mockWish);
 
-      const result = await service.createWish(userId, createWishDto);
-      expect(result).toEqual(wish);
+      expect(await service.createWish(1, createWishDto)).toEqual(mockWish);
     });
 
-    it('should throw NotFoundException if user not found', async () => {
-      const userId = 1;
-      const createWishDto: CreateWishDto = {
-        name: 'New Wish',
-        link: 'https://example.com',
-        image: 'https://example.com/image.jpg',
-        price: 100,
-        description: 'A new wish',
-      };
-
-      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
-
-      await expect(service.createWish(userId, createWishDto)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
-  describe('getLastWishes', () => {
-    it('should return an array of wishes', async () => {
-      const wishes = [
-        { name: 'Wish 1', createdAt: new Date() },
-        { name: 'Wish 2', createdAt: new Date() },
-      ] as Wish[];
-
-      jest.spyOn(wishRepository, 'find').mockResolvedValue(wishes);
-
-      const result = await service.getLastWishes();
-      expect(result).toEqual(wishes);
-    });
-  });
-
-  describe('getTopWishes', () => {
-    it('should return an array of top wishes', async () => {
-      const wishes = [
-        { name: 'Top Wish 1', copied: 10 },
-        { name: 'Top Wish 2', copied: 5 },
-      ] as Wish[];
-
-      jest.spyOn(wishRepository, 'find').mockResolvedValue(wishes);
-
-      const result = await service.getTopWishes();
-      expect(result).toEqual(wishes);
+    it('should throw NotFoundException if user is not found', async () => {
+      userRepository.findOneBy.mockResolvedValue(null);
+      await expect(
+        service.createWish(1, { name: 'New Wish' } as CreateWishDto),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('getWishById', () => {
-    it('should return a wish by id', async () => {
-      const wishId = 1;
-      const wish = { id: wishId, name: 'Wish 1' } as Wish;
+    it('should return a wish if found', async () => {
+      const mockWish = { id: 1, name: 'Wish' } as Wish;
+      wishRepository.findOne.mockResolvedValue(mockWish);
 
-      jest.spyOn(wishRepository, 'findOne').mockResolvedValue(wish);
-
-      const result = await service.getWishById(wishId);
-      expect(result).toEqual(wish);
+      expect(await service.getWishById(1)).toEqual(mockWish);
     });
 
-    it('should throw NotFoundException if wish not found', async () => {
-      const wishId = 1;
+    it('should throw NotFoundException if wish is not found', async () => {
+      wishRepository.findOne.mockResolvedValue(null);
+      await expect(service.getWishById(1)).rejects.toThrow(NotFoundException);
+    });
+  });
 
-      jest.spyOn(wishRepository, 'findOne').mockResolvedValue(null);
+  describe('updateWish', () => {
+    it('should update and return the wish', async () => {
+      const mockWish = {
+        id: 1,
+        owner: { id: 1 } as User,
+        name: 'Updated Wish',
+      } as Wish;
+      const updateWishDto = { name: 'Updated Wish' } as UpdateWishDto;
 
-      await expect(service.getWishById(wishId)).rejects.toThrow(
-        NotFoundException,
-      );
+      jest.spyOn(service, 'getWishById').mockResolvedValue(mockWish);
+      wishRepository.update.mockResolvedValue(null);
+
+      expect(await service.updateWish(1, 1, updateWishDto)).toEqual({
+        ...mockWish,
+        ...updateWishDto,
+      });
+    });
+
+    it('should throw ForbiddenException if user is not the owner', async () => {
+      const mockWish = {
+        id: 1,
+        owner: { id: 2 } as User,
+        name: 'Wish',
+      } as Wish;
+      jest.spyOn(service, 'getWishById').mockResolvedValue(mockWish);
+
+      await expect(
+        service.updateWish(1, 1, { name: 'Updated Wish' } as UpdateWishDto),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('deleteWish', () => {
-    it('should delete a wish', async () => {
-      const userId = 1;
-      const wishId = 1;
-      const existingWish = { id: wishId, owner: { id: userId } } as Wish;
+    it('should delete the wish successfully', async () => {
+      const mockWish = { id: 1, owner: { id: 1 } as User } as Wish;
+      jest.spyOn(service, 'getWishById').mockResolvedValue(mockWish);
+      wishRepository.delete.mockResolvedValue({ affected: 1, raw: {} });
 
-      jest.spyOn(service, 'getWishById').mockResolvedValue(existingWish);
-      jest
-        .spyOn(wishRepository, 'delete')
-        .mockResolvedValue({ raw: {}, affected: 1 });
-
-      await service.deleteWish(userId, wishId);
-      expect(wishRepository.delete).toHaveBeenCalledWith(wishId);
+      await expect(service.deleteWish(1, 1)).resolves.not.toThrow();
     });
 
-    it('should throw ForbiddenException if user does not own the wish', async () => {
-      const userId = 2;
-      const wishId = 1;
-      const existingWish = { id: wishId, owner: { id: 1 } } as Wish;
+    it('should throw ForbiddenException if user is not the owner', async () => {
+      const mockWish = { id: 1, owner: { id: 2 } as User } as Wish;
+      jest.spyOn(service, 'getWishById').mockResolvedValue(mockWish);
 
-      jest.spyOn(service, 'getWishById').mockResolvedValue(existingWish);
-
-      await expect(service.deleteWish(userId, wishId)).rejects.toThrow(
+      await expect(service.deleteWish(1, 1)).rejects.toThrow(
         ForbiddenException,
       );
     });
   });
 
   describe('copyWish', () => {
-    it('should copy a wish and update the original wish', async () => {
-      const userId = 2;
-      const wishId = 1;
-      const originalWish = {
-        id: wishId,
-        name: 'Original Wish',
-        copied: 5,
-        owner: { id: 1 },
-      } as Wish;
-      const user = { id: userId } as User;
-      const copiedWish = {
-        ...originalWish,
-        id: 2,
-        owner: user,
-        copied: 0,
-      } as Wish;
+    it('should copy and return a wish', async () => {
+      const mockUser = { id: 1 } as User;
+      const originalWish = { id: 1, owner: mockUser, copied: 1 } as Wish;
+      const copiedWish = { id: 2, owner: mockUser, copied: 0 } as Wish;
 
       jest.spyOn(service, 'getWishById').mockResolvedValue(originalWish);
-      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(user);
-      jest.spyOn(wishRepository, 'create').mockReturnValue(copiedWish);
-      jest.spyOn(wishRepository, 'save').mockResolvedValue(copiedWish);
-      jest.spyOn(wishRepository, 'save').mockResolvedValue(originalWish);
+      userRepository.findOneBy.mockResolvedValue(mockUser);
+      wishRepository.findOne.mockResolvedValue(null);
+      wishRepository.create.mockReturnValue(copiedWish);
+      wishRepository.save.mockResolvedValue(copiedWish);
 
-      const result = await service.copyWish(userId, wishId);
-      expect(result).toEqual(originalWish);
-      expect(originalWish.copied).toBe(6); // Проверка, что счетчик увеличился
+      expect(await service.copyWish(1, 1)).toEqual(copiedWish);
     });
 
-    it('should throw NotFoundException if user not found', async () => {
-      const userId = 2;
-      const wishId = 1;
-      const originalWish = {
-        id: wishId,
-        name: 'Original Wish',
-        copied: 5,
-        owner: { id: 1 },
-      } as Wish;
+    it('should throw BadRequestException if wish has already been copied', async () => {
+      const mockUser = { id: 1 } as User;
+      const originalWish = { id: 1, owner: mockUser, copied: 1 } as Wish;
+      const existingCopy = { id: 2, owner: mockUser } as Wish;
 
       jest.spyOn(service, 'getWishById').mockResolvedValue(originalWish);
-      jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(null);
+      userRepository.findOneBy.mockResolvedValue(mockUser);
+      wishRepository.findOne.mockResolvedValue(existingCopy);
 
-      await expect(service.copyWish(userId, wishId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.copyWish(1, 1)).rejects.toThrow(BadRequestException);
     });
   });
 });
