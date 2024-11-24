@@ -6,4 +6,11 @@ export class AppController {
   getStatus(): string {
     return 'API is running';
   }
+
+  @Get('crash-test')
+  crashTest() {
+    setTimeout(() => {
+      throw new Error('Сервер сейчас упадёт');
+    }, 0);
+  }
 }
