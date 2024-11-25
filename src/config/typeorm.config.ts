@@ -10,11 +10,6 @@ import { Offer } from '@entities/offer.entity';
 
 dotenv.config();
 
-console.log(process.env.DB_HOST);
-console.log(process.env.DB_PORT);
-console.log(process.env.POSTGRES_USER);
-console.log(process.env.POSTGRES_PASSWORD);
-
 const ormConfig: TypeOrmModuleOptions = {
   type: 'postgres',
   host: process.env.DB_HOST,
